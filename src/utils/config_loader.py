@@ -107,7 +107,7 @@ class VenueConfig:
         if not isinstance(data, dict):
             raise ValueError(f"Venue config for {venue!r} must parse to a mapping.")
 
-        # Human-readable prefix for any validation errors that follow
+        # Prefix for any validation errors that follow
         ctx = f"Venue config for {venue!r}"
 
         # Pull out the required "folder_structure" section
