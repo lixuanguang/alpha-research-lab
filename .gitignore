@@ -1,0 +1,14 @@
+.DS_Store
+__pycache__/
+build/
+dist/
+*.egg-info/
+
+# Sensitive research data: ignore all materialized data artifacts by default.
+data/**
+
+# Keep the directory structure and documentation trackable.
+!data/
+!data/**/
+!data/**/*.md
+!data/**/.gitkeep
