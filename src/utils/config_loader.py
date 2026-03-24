@@ -14,55 +14,7 @@ from typing import Any
 
 import yaml
 
-from utils.repo_paths import REPO_ROOT, VENUE_CONFIG_ROOT
-
-
-def _resolve_path(path_value: str) -> Path:
-    """Resolve a path string relative to the repository root.
-
-    If *path_value* is already absolute it is returned unchanged;
-    otherwise it is joined to ``REPO_ROOT``.
-
-    @param path_value: Filesystem path as a string (absolute or relative).
-    @return: Resolved absolute ``Path``.
-    """
-    path = Path(path_value)
-    if path.is_absolute():
-        return path  # Already absolute – nothing to resolve
-    # Treat as relative to the repository root
-    return REPO_ROOT / path
-
-
-def _require_string(data: dict[str, Any], key: str, *, context: str) -> str:
-    """Extract a required string value from *data*.
-
-    @param data: Mapping to look up the key in.
-    @param key: Key whose value must be a ``str``.
-    @param context: Human-readable label used in the error message on failure.
-    @return: The string value associated with *key*.
-    @raises ValueError: If *key* is missing or its value is not a string.
-    """
-    value = data.get(key)
-    # None (missing key) or wrong type both trigger the error
-    if not isinstance(value, str):
-        raise ValueError(f"{context} is missing a string {key!r}.")
-    return value
-
-
-def _require_mapping(data: dict[str, Any], key: str, *, context: str) -> dict[str, Any]:
-    """Extract a required mapping (dict) value from *data*.
-
-    @param data: Mapping to look up the key in.
-    @param key: Key whose value must be a ``dict``.
-    @param context: Human-readable label used in the error message on failure.
-    @return: The ``dict`` value associated with *key*.
-    @raises ValueError: If *key* is missing or its value is not a mapping.
-    """
-    value = data.get(key)
-    # None (missing key) or wrong type both trigger the error
-    if not isinstance(value, dict):
-        raise ValueError(f"{context} is missing a mapping {key!r}.")
-    return value
+from utils.path_utils import REPO_ROOT, VENUE_CONFIG_ROOT
 
 
 # frozen=True makes instances immutable and hashable (required for lru_cache)
@@ -107,31 +59,14 @@ class VenueConfig:
         if not isinstance(data, dict):
             raise ValueError(f"Venue config for {venue!r} must parse to a mapping.")
 
-        # Prefix for any validation errors that follow
-        ctx = f"Venue config for {venue!r}"
+        fs = data["folder_structure"]
 
-        # Pull out the required "folder_structure" section
-        fs = _require_mapping(data, "folder_structure", context=ctx)
+        resolve = lambda p: Path(p) if Path(p).is_absolute() else REPO_ROOT / p
 
-        # Build the dataclass – each path is validated then resolved to absolute
         return cls(
-            api_endpoint=_require_string(data, "api_endpoint", context=ctx),
-            raw_root=_resolve_path(
-                _require_string(fs, "raw_root", context=f"{ctx} folder_structure"),
-            ),
-            historical_data_folder=_resolve_path(
-                _require_string(
-                    fs,
-                    "historical_data_folder",
-                    context=f"{ctx} folder_structure",
-                ),
-            ),
-            live_data_folder=_resolve_path(
-                _require_string(
-                    fs,
-                    "live_data_folder",
-                    context=f"{ctx} folder_structure",
-                ),
-            ),
+            api_endpoint=data["api_endpoint"],
+            raw_root=resolve(fs["raw_root"]),
+            historical_data_folder=resolve(fs["historical_data_folder"]),
+            live_data_folder=resolve(fs["live_data_folder"]),
             raw=data,
         )
