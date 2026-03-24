@@ -1,9 +1,4 @@
-"""Shared path-resolving helpers for venue configuration files.
-
-Provides utilities for loading and validating YAML-based venue
-configuration, resolving relative paths against the repository root,
-and exposing the result as an immutable, cached dataclass.
-"""
+"""Shared YAML config loaders."""
 
 from __future__ import annotations
 
@@ -14,59 +9,51 @@ from typing import Any
 
 import yaml
 
-from utils.path_utils import REPO_ROOT, VENUE_CONFIG_ROOT
+from utils.path_utils import REPO_ROOT, UTILS_CONFIG_ROOT, VENUE_CONFIG_ROOT
 
 
-# frozen=True makes instances immutable and hashable (required for lru_cache)
+def _load_yaml(path: Path) -> dict[str, Any]:
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path.name} must parse to a mapping.")
+    return data
+
+
 @dataclass(frozen=True)
-class VenueConfig:
-    """Typed, immutable representation of a venue configuration file.
-
-    Attributes:
-        api_endpoint: Base URL for the venue's REST API.
-        raw_root: Absolute path to the venue's top-level raw data directory.
-        historical_data_folder: Absolute path to the historical data directory.
-        live_data_folder: Absolute path to the live/streaming data directory.
-        raw: The full, unparsed configuration dictionary as loaded from YAML.
-    """
-
-    api_endpoint: str               # Base URL for the venue's REST API
-    raw_root: Path                  # top-level raw data directory for this venue
-    historical_data_folder: Path    # sub-folder holding historical datasets
-    live_data_folder: Path          # sub-folder holding live / streaming data
-    raw: dict[str, Any]             # complete YAML dict preserved for ad-hoc access
+class DateUtilsConfig:
+    period_specs: dict[str, dict[str, Any]]
 
     @classmethod
-    @cache  # Avoids re-reading YAML on repeated calls
+    @cache
+    def load(cls) -> DateUtilsConfig:
+        data = _load_yaml(UTILS_CONFIG_ROOT / "date_utils_config.yaml")
+        specs: dict[str, dict[str, Any]] = {}
+        for name, entry in data["period_specs"].items():
+            spec = {"pattern": entry["pattern"], "format": entry["format"]}
+            specs[name] = spec
+            for alias in entry.get("aliases", []):
+                specs[alias] = spec
+        return cls(period_specs=specs)
+
+
+@dataclass(frozen=True)
+class VenueConfig:
+    api_endpoint: str
+    raw_root: Path
+    historical_data_folder: Path
+    live_data_folder: Path
+    raw: dict[str, Any]
+
+    @classmethod
+    @cache
     def load(cls, venue: str) -> VenueConfig:
-        """Load and cache the configuration for a given venue.
-
-        The YAML file is read from ``VENUE_CONFIG_ROOT/<venue>.yaml``
-        (case-insensitive). Results are cached so repeated calls with the
-        same *venue* value return the identical instance.
-
-        @param venue: Venue identifier (e.g. ``"venue_a"``, ``"venue_b"``).
-        @return: A frozen ``VenueConfig`` instance with all paths resolved.
-        @raises FileNotFoundError: If the YAML file does not exist.
-        @raises ValueError: If the YAML content is not a valid venue config.
-        """
-        # Normalise to lowercase so e.g. "Venue_A" and
-        # "venue_a" resolve to the same file
-        path = VENUE_CONFIG_ROOT / f"{venue.lower()}.yaml"
-
-        # Read and parse the YAML file into a Python dict
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise ValueError(f"Venue config for {venue!r} must parse to a mapping.")
-
+        data = _load_yaml(VENUE_CONFIG_ROOT / f"{venue.lower()}.yaml")
         fs = data["folder_structure"]
-
         resolve = lambda p: Path(p) if Path(p).is_absolute() else REPO_ROOT / p
-
         return cls(
             api_endpoint=data["api_endpoint"],
-            raw_root=resolve(fs["raw_root"]),
-            historical_data_folder=resolve(fs["historical_data_folder"]),
-            live_data_folder=resolve(fs["live_data_folder"]),
+            raw_root=resolve(fs["raw_root"]),  # type: ignore[no-untyped-call]
+            historical_data_folder=resolve(fs["historical_data_folder"]),  # type: ignore[no-untyped-call]
+            live_data_folder=resolve(fs["live_data_folder"]),  # type: ignore[no-untyped-call]
             raw=data,
         )

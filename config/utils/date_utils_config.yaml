@@ -1,0 +1,16 @@
+period_specs:
+  day:
+    aliases:
+      - daily
+    pattern: '(\d{4})-(\d{2})-(\d{2})'
+    format: '%Y-%m-%d'
+  month:
+    aliases:
+      - monthly
+    pattern: '(\d{4})-(\d{2})'
+    format: '%Y-%m'
+  year:
+    aliases:
+      - yearly
+    pattern: '(\d{4})'
+    format: '%Y'
