@@ -15,15 +15,17 @@ def download_file(url: str, target: Path, *, user_agent: str, retries: int = 5) 
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".part")
 
-    for attempt in range(1, retries + 1):
+    for attempt in range(retries):
         try:
             req = Request(url, headers={"User-Agent": user_agent})
-            with urlopen(req, timeout=300) as resp, tmp.open("wb") as f:
-                shutil.copyfileobj(resp, f)
-            tmp.replace(target)
-            return target.stat().st_size
-        except Exception:
+            with urlopen(req, timeout=300) as r, tmp.open("wb") as f:
+                shutil.copyfileobj(r, f)
+            break
+        except Exception as e:
             tmp.unlink(missing_ok=True)
-            if attempt == retries:
-                raise
-            time.sleep(min(20, 2**attempt))
+            if attempt + 1 == retries:
+                raise RuntimeError(f"Failed to download {url} after {retries} attempts") from e
+            time.sleep(min(20, 2 ** (attempt + 1)))
+
+    tmp.replace(target)
+    return target.stat().st_size

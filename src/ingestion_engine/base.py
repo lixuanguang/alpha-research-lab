@@ -22,7 +22,7 @@ class VenueIngestion(ABC):
         self.start: date | None = None
         self.end: date | None = None
         self.assets: tuple[str, ...] = ()
-        self.spec: Any = None
+        self.earliest_date: date | None = None
         self.records: list[dict[str, Any]] = []
         self.run_id: str = ""
         self.manifest: dict[str, Any] = {}
@@ -53,7 +53,7 @@ class VenueIngestion(ABC):
         return target
 
     def resolve_date_window(self) -> tuple[date, date] | None:
-        effective_start = max(self.spec.start_date, self.start) if self.start else self.spec.start_date
+        effective_start = max(self.earliest_date, self.start) if self.start else self.earliest_date
         today = datetime.now(UTC).date()
         effective_end = min(today, self.end) if self.end else today
         if effective_end < effective_start:
