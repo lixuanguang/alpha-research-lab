@@ -46,6 +46,11 @@ def resolve_period(value: str | int, granularity: str, *, fallback_ms: int | str
     return timestamp_ms, label_dt.strftime(raw["format"])
 
 
+def iso_or_none(d: date | None) -> str | None:
+    """Return *d* as an ISO-8601 string, or ``None`` if *d* is falsy."""
+    return d.isoformat() if d else None
+
+
 def coerce_date(value: Any, *, label: str = "date") -> date:
     """Coerce a date or ``YYYY-MM-DD`` string to a `date`."""
     if isinstance(value, date):
