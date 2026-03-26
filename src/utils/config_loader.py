@@ -38,11 +38,15 @@ class DateUtilsConfig:
 
 @dataclass(frozen=True)
 class VenueConfig:
-    api_endpoint: str
+    base_url: str
+    api_dirs: dict[str, str]
     raw_root: Path
     historical_data_folder: Path
     live_data_folder: Path
     raw: dict[str, Any]
+
+    def api_url(self, name: str) -> str:
+        return f"{self.base_url}/{self.api_dirs[name]}"
 
     @classmethod
     @cache
@@ -51,7 +55,8 @@ class VenueConfig:
         fs = data["folder_structure"]
         resolve = lambda p: Path(p) if Path(p).is_absolute() else REPO_ROOT / p
         return cls(
-            api_endpoint=data["api_endpoint"],
+            base_url=data["base_url"],
+            api_dirs=data["api_dirs"],
             raw_root=resolve(fs["raw_root"]),  # type: ignore[no-untyped-call]
             historical_data_folder=resolve(fs["historical_data_folder"]),  # type: ignore[no-untyped-call]
             live_data_folder=resolve(fs["live_data_folder"]),  # type: ignore[no-untyped-call]
