@@ -1,0 +1,100 @@
+# OKX venue configuration file
+
+venue: OKX
+
+asset_class: crypto
+
+base_url: https://www.okx.com/priapi/v5/broker/public/trade-data
+api_dirs:
+  download_link: download-link
+  instruments: instruments
+  coins: coins
+api_method: POST
+
+verification:
+  verified_on: "2026-03-23"
+  sources:
+    - live probes against the OKX download-link, instruments, and coins endpoints
+    - OKX historical-data frontend bundle for module enums and UI-only aliases
+  notes:
+    - modules is the runtime source of truth and expands into concrete ingestion specs
+    - module "10" is an order-book UI alias and is rejected by the POST endpoint with code 51000
+
+folder_structure:
+  raw_root: /Volumes/Crypto/data/raw/crypto/venue=OKX
+  historical_data_folder: /Volumes/Crypto/data/raw/crypto/venue=OKX/historical
+  live_data_folder: /Volumes/Crypto/data/raw/crypto/venue=OKX/live
+
+download_link_request:
+  content_type: application/json
+  body_fields:
+    module:
+      supported_values: ["1", "2", "3", "4", "5", "11"]
+      ui_aliases:
+        - code: "10"
+          name: order_book
+          request_supported: false
+    instType:
+      supported_values: [SPOT, SWAP, FUTURES, OPTION]
+    instQueryParam:
+      supported_keys: [instIdList, instFamilyList, ccyList]
+      rules:
+        SPOT: instIdList
+        SWAP: instFamilyList
+        FUTURES: instFamilyList
+        OPTION: instFamilyList
+        INTEREST_RATE: ccyList
+    dateQuery:
+      supported_fields: [dateAggrType, begin, end]
+      supported_date_aggr_types: [daily, monthly]
+      timestamp_unit: epoch_milliseconds
+
+default_query_keys:
+  SPOT: instIdList
+  SWAP: instFamilyList
+  FUTURES: instFamilyList
+  OPTION: instFamilyList
+
+modules:
+  - dataset: trade_history
+    code: "1"
+    inst_types: [SPOT, SWAP, FUTURES, OPTION]
+    date_aggr_types: [daily, monthly]
+    start_date: "2021-09-01"
+
+  - dataset: candles
+    code: "2"
+    inst_types: [SPOT, SWAP, FUTURES, OPTION]
+    date_aggr_types: [daily, monthly]
+    start_date: "2020-01-01"
+    path_parts: [freq=1m]
+
+  - dataset: funding_rate
+    code: "3"
+    inst_types: [SWAP]
+    date_aggr_types: [daily, monthly]
+    start_date: "2022-03-01"
+
+  - dataset: order_book
+    code: "4"
+    depth: "400"
+    inst_types: [SPOT, SWAP, FUTURES, OPTION]
+    date_aggr_types: [daily]
+    start_date: "2023-03-23"
+    path_parts: [depth=400]
+
+  - dataset: order_book
+    code: "5"
+    depth: "5000"
+    inst_types: [SPOT, SWAP, FUTURES, OPTION]
+    date_aggr_types: [daily]
+    start_date: "2025-11-01"
+    path_parts: [depth=5000]
+
+  - dataset: borrowing_rate
+    code: "11"
+    inst_types: [SPOT]
+    date_aggr_types: [daily, monthly]
+    start_date: "2021-12-14"
+    query_keys: {SPOT: ccyList}
+    include_inst_type_in_path: false
