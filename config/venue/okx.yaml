@@ -1,0 +1,81 @@
+# OKX venue configuration file
+
+venue_metadata:
+  name: OKX
+  asset_class: crypto
+
+historical_data_api:
+  base_url: https://www.okx.com/priapi/v5/broker/public/trade-data
+  headers:
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    Content-Type: "application/json"
+    Referer: "https://www.okx.com/historical-data"
+    Origin: "https://www.okx.com"
+
+  endpoints:
+    download_link:
+      method: POST
+      path: download-link
+
+  # instQueryParam rules per inst_type
+  inst_query_param:
+    SPOT:
+      key: instIdList          # e.g. ["BTC-USDT"]
+    FUTURES:
+      key: instFamilyList      # e.g. ["BTC-USD"]
+    SWAP:
+      key: instFamilyList      # e.g. ["BTC-USDT"]
+    OPTION:
+      key: instFamilyList      # e.g. ["BTC-USD"]
+
+  modules:
+    trade_history:
+      id: "1"
+      available_since: "2021-09-01"
+      date_aggr_types: ["daily", "monthly"]
+      supported_inst_types: ["SPOT", "FUTURES", "SWAP", "OPTION"]
+
+    candlestick:
+      id: "2"
+      available_since: "2023-07-01"
+      date_aggr_types: ["daily", "monthly"]
+      supported_inst_types: ["SPOT", "FUTURES", "SWAP", "OPTION"]
+
+    funding_rates:
+      id: "3"
+      available_since: "2022-03-01"
+      date_aggr_types: ["daily", "monthly"]
+      supported_inst_types: ["SWAP"]
+      # daily: instFamilyList must be [] (all swaps bundled into one file)
+      # monthly: specific family works, e.g. ["BTC-USD"]
+      overrides:
+        daily:
+          inst_query_param: { key: instFamilyList, value: [] }
+        monthly:
+          inst_query_param: { key: instFamilyList }
+
+    order_book_400:
+      id: "4"
+      available_since: "2023-03-23"
+      date_aggr_types: ["daily"]
+      supported_inst_types: ["SPOT", "FUTURES", "SWAP", "OPTION"]
+
+    order_book_5000:
+      id: "5"
+      available_since: "2025-11-01"
+      date_aggr_types: ["daily"]
+      supported_inst_types: ["SPOT", "FUTURES", "SWAP", "OPTION"]
+
+    interest_rate:
+      id: "11"
+      available_since: "2021-12-14"
+      date_aggr_types: ["daily", "monthly"]
+      supported_inst_types: ["SPOT"]
+      # Uses ccyList instead of instIdList/instFamilyList
+      # daily: ccyList=[] returns all currencies in one file
+      # monthly: specific currency, e.g. ["BTC"]
+      overrides:
+        all:
+          inst_query_param: { key: ccyList }
+
+

@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "alpha-research-lab"
+version = "0.1.0"
+description = "Multi-asset research platform for alpha generation."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "polars>=1,<2",
+    "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[project.scripts]
+ingestion-engine = "ingestion_engine.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["alpha_research", "alpha_research.*", "ingestion_engine", "ingestion_engine.*", "utils", "utils.*"]
+
+[tool.ruff]
+src = ["src"]
+target-version = "py311"
+line-length = 300
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E731", # allow lambda assignments
+]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+packages = ["alpha_research", "ingestion_engine", "utils"]
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["ingestion_engine.base_ingestion_engine"]
+ignore_missing_imports = true
