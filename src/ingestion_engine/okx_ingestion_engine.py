@@ -18,7 +18,6 @@ import utils.config_loader as config_loader
 import utils.datetime_utils as datetime_utils
 from utils.path_utils import DATA_ROOT, VENUE_CONFIG_ROOT
 
-
 LOGGER = logging.getLogger(__name__)
 
 
