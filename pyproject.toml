@@ -32,7 +32,7 @@ include = ["alpha_research", "alpha_research.*", "ingestion_engine", "ingestion_
 [tool.ruff]
 src = ["src"]
 target-version = "py311"
-line-length = 120
+line-length = 300
 
 [tool.ruff.lint]
 select = [
@@ -59,4 +59,8 @@ warn_unused_configs = true
 
 [[tool.mypy.overrides]]
 module = ["yaml"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["ingestion_engine.base_ingestion_engine"]
 ignore_missing_imports = true

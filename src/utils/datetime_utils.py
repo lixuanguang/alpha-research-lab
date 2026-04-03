@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def to_timestamp_ms(value: str, fmt: str = "%Y%m%d") -> str:
@@ -14,7 +14,7 @@ def to_timestamp_ms(value: str, fmt: str = "%Y%m%d") -> str:
     @return: Epoch milliseconds as a string.
     '''
     parsed_datetime = datetime.strptime(value, fmt)
-    return str(int(parsed_datetime.replace(tzinfo=timezone.utc).timestamp() * 1000))
+    return str(int(parsed_datetime.replace(tzinfo=UTC).timestamp() * 1000))
 
 
 def shift_date(value: str, days: int = 1, fmt: str = "%Y%m%d") -> str:
@@ -38,4 +38,4 @@ def timestamp_ms_to_string(value: str | int, fmt: str = "%Y-%m-%d %H:%M:%S") -> 
     @param fmt: Output datetime format.
     @return: Formatted UTC datetime string.
     '''
-    return datetime.fromtimestamp(int(value) / 1000, tz=timezone.utc).strftime(fmt)
+    return datetime.fromtimestamp(int(value) / 1000, tz=UTC).strftime(fmt)

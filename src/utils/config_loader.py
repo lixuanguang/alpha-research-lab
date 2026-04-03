@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from functools import cache
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
 
 def load_yaml(path: Path) -> dict[str, Any]:
     '''
     Load a YAML file and return its contents as a dictionary.
-    
+
     @param path: The path to the YAML file.
     @return: A dictionary containing the contents of the YAML file.
     @raises ValueError: If the YAML file does not parse to a mapping (dictionary).

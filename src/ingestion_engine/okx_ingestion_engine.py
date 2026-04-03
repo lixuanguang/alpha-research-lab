@@ -8,15 +8,17 @@ import shutil
 import time
 from datetime import date
 from pathlib import Path
+from typing import Any, cast
 from urllib import error, request
 
 import polars as pl
+
 import utils.config_loader as config_loader
 import utils.datetime_utils as datetime_utils
 from utils.path_utils import DATA_ROOT, VENUE_CONFIG_ROOT
 
 
-class OKXIngestion():
+class OKXIngestion:
 
     def __init__(self, instrument: list[str], download_data_types: list[str], start_date: str | None, end_date: str | None, inst_type: str) -> None:
         '''
@@ -77,6 +79,7 @@ class OKXIngestion():
         '''
         start_date, end_date = self._resolve_date_range(data_type)
         response_data = self._request_download_data(data_type, start_date, end_date)
+        details = cast("list[dict[str, Any]]", response_data.get("details", []))
 
         rows = [
             {
@@ -87,8 +90,8 @@ class OKXIngestion():
                 "timestamp": datetime_utils.timestamp_ms_to_string(date_ts),
                 "local_path": self._set_download_to_local_path(data_type, detail.get("instId") or detail.get("instFamily") or detail.get("ccy") or "", url_value),
             }
-            for detail in response_data.get("details", [])
-            for group_detail in detail.get("groupDetails", [])
+            for detail in details
+            for group_detail in cast("list[dict[str, Any]]", detail.get("groupDetails", []))
             if isinstance((url_value := group_detail.get("url")), str)
             and (date_ts := group_detail.get("dateTs")) is not None
         ]
@@ -98,7 +101,7 @@ class OKXIngestion():
             schema={"data_type": pl.String, "inst_type": pl.String, "instrument": pl.String, "url": pl.String, "timestamp": pl.String, "local_path": pl.String},
         )
 
-    def _request_download_data(self, data_type: str, start_date: str, end_date: str) -> dict[str, object]:
+    def _request_download_data(self, data_type: str, start_date: str, end_date: str) -> dict[str, Any]:
         '''
         Request OKX download metadata for a date range.
 
@@ -128,7 +131,11 @@ class OKXIngestion():
         for attempt in range(5):
             try:
                 with request.urlopen(http_request, timeout=30) as response:
-                    return json.loads(response.read().decode("utf-8")).get("data", {})
+                    response_payload = json.loads(response.read().decode("utf-8"))
+                    if not isinstance(response_payload, dict):
+                        return {}
+                    response_data = response_payload.get("data", {})
+                    return response_data if isinstance(response_data, dict) else {}
             except error.HTTPError as exc:
                 if exc.code != 429 or attempt == 4:
                     raise
@@ -150,7 +157,7 @@ class OKXIngestion():
         if override is not None:
             key = override["key"]
             query_values = [instrument.split("-", maxsplit=1)[0] for instrument in self.instrument] if key == "ccyList" else self.instrument
-            return {key: override["value"] if "value" in override else query_values}
+            return {key: override.get("value", query_values)}
 
         key = self.venue_config["historical_data_api"]["inst_query_param"][self.inst_type]["key"]
         query_values = [instrument.split("-", maxsplit=1)[0] for instrument in self.instrument] if key == "ccyList" else self.instrument
@@ -184,11 +191,12 @@ class OKXIngestion():
         while current_start_date <= end_date:
             current_end_date = min(datetime_utils.shift_date(current_start_date, days=30), end_date)
             response_data = self._request_download_data(data_type, current_start_date, current_end_date)
+            details = cast("list[dict[str, Any]]", response_data.get("details", []))
             first_date_ts = min(
                 (
                     int(group_detail["dateTs"])
-                    for detail in response_data.get("details", [])
-                    for group_detail in detail.get("groupDetails", [])
+                    for detail in details
+                    for group_detail in cast("list[dict[str, Any]]", detail.get("groupDetails", []))
                     if group_detail.get("dateTs") is not None
                 ),
                 default=None,
@@ -251,13 +259,13 @@ if __name__ == "__main__":
     parser.add_argument("--instrument", nargs="*", default=[], help="Instrument(s) to ingest, e.g. BTC-USDT ETH-USDT",)
     parser.add_argument("--download_data_types", nargs="*", required=True, help="Data types to download, e.g. trade_history funding_rates",)
     parser.add_argument("--inst_type", choices=["SPOT", "FUTURES", "SWAP", "OPTION"], required=True, help="OKX instrument type",)
-    
+
     date_mode_group = parser.add_mutually_exclusive_group(required=True)
     date_mode_group.add_argument("--download_all_data", action="store_true", help="Download all available data using the widest configured date range",)
     date_mode_group.add_argument("--date_range", nargs=2, metavar=("START_DATE", "END_DATE"), type=lambda s: s.replace("-", ""), help="Start and end dates in YYYYMMDD format",)
-    
+
     args = parser.parse_args()
-    
+
     start_date, end_date = (args.date_range if args.date_range else (None, None))
 
     ingestion = OKXIngestion(args.instrument, args.download_data_types, start_date, end_date, args.inst_type,)
