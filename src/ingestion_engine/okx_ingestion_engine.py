@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import shutil
 import time
 from datetime import date
@@ -16,6 +17,9 @@ import polars as pl
 import utils.config_loader as config_loader
 import utils.datetime_utils as datetime_utils
 from utils.path_utils import DATA_ROOT, VENUE_CONFIG_ROOT
+
+
+LOGGER = logging.getLogger(__name__)
 
 
 class OKXIngestion:
@@ -45,6 +49,7 @@ class OKXIngestion:
         @param: None.
         @return: A Polars dataframe of discovered files and download flags.
         '''
+        LOGGER.info("Starting OKX ingestion for %s data type(s)", len(self.download_data_types))
         available_files = [self._fetch_available_file_urls(data_type) for data_type in self.download_data_types]
         if not available_files:
             return pl.DataFrame(
@@ -62,12 +67,16 @@ class OKXIngestion:
         available_files_df = pl.concat(available_files, how="vertical").with_columns(
             pl.col("url").map_elements(lambda url: not self._check_data_existence(url), return_dtype=pl.Boolean).alias("To Download")
         )
+        total_rows = available_files_df.height
+        total_to_download = available_files_df.filter(pl.col("To Download")).height
+        LOGGER.info("Discovered %s file(s); %s file(s) need download", total_rows, total_to_download)
 
         for row in available_files_df.filter(pl.col("To Download")).iter_rows(named=True):
             target_path = Path(row["local_path"])
             target_path.parent.mkdir(parents=True, exist_ok=True)
             self._download_file(row["url"], target_path)
 
+        LOGGER.info("OKX ingestion finished")
         return available_files_df
 
     def _fetch_available_file_urls(self, data_type: str) -> pl.DataFrame:
@@ -78,23 +87,36 @@ class OKXIngestion:
         @return: A Polars dataframe of discovered files.
         '''
         start_date, end_date = self._resolve_date_range(data_type)
-        response_data = self._request_download_data(data_type, start_date, end_date)
-        details = cast("list[dict[str, Any]]", response_data.get("details", []))
+        LOGGER.info("Fetching %s from %s to %s", data_type, start_date, end_date)
+        rows: list[dict[str, str]] = []
+        current_start_date = start_date
+        chunk_index = 1
 
-        rows = [
-            {
-                "data_type": data_type,
-                "inst_type": self.inst_type,
-                "instrument": detail.get("instId") or detail.get("instFamily") or detail.get("ccy") or "",
-                "url": url_value,
-                "timestamp": datetime_utils.timestamp_ms_to_string(date_ts),
-                "local_path": self._set_download_to_local_path(data_type, detail.get("instId") or detail.get("instFamily") or detail.get("ccy") or "", url_value),
-            }
-            for detail in details
-            for group_detail in cast("list[dict[str, Any]]", detail.get("groupDetails", []))
-            if isinstance((url_value := group_detail.get("url")), str)
-            and (date_ts := group_detail.get("dateTs")) is not None
-        ]
+        while current_start_date <= end_date:
+            current_end_date = min(datetime_utils.shift_date(current_start_date, days=20), end_date)
+            LOGGER.info("Requesting %s chunk %s: %s to %s", data_type, chunk_index, current_start_date, current_end_date)
+            response_data = self._request_download_data(data_type, current_start_date, current_end_date)
+            details = cast("list[dict[str, Any]]", response_data.get("details", []))
+            before_count = len(rows)
+            rows.extend(
+                {
+                    "data_type": data_type,
+                    "inst_type": self.inst_type,
+                    "instrument": detail.get("instId") or detail.get("instFamily") or detail.get("ccy") or "",
+                    "url": url_value,
+                    "timestamp": datetime_utils.timestamp_ms_to_string(date_ts),
+                    "local_path": self._set_download_to_local_path(data_type, detail.get("instId") or detail.get("instFamily") or detail.get("ccy") or "", url_value),
+                }
+                for detail in details
+                for group_detail in cast("list[dict[str, Any]]", detail.get("groupDetails", []))
+                if isinstance((url_value := group_detail.get("url")), str)
+                and (date_ts := group_detail.get("dateTs")) is not None
+            )
+            LOGGER.info("Received %s file(s) for %s chunk %s", len(rows) - before_count, data_type, chunk_index)
+            current_start_date = datetime_utils.shift_date(current_end_date)
+            chunk_index += 1
+
+        LOGGER.info("Finished %s with %s discovered file(s)", data_type, len(rows))
 
         return pl.DataFrame(
             rows,
@@ -140,6 +162,7 @@ class OKXIngestion:
                 if exc.code != 429 or attempt == 4:
                     raise
                 retry_after = exc.headers.get("Retry-After")
+                LOGGER.warning("Rate limited fetching %s for %s to %s; retrying", data_type, start_date, end_date)
                 time.sleep(int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt)
 
         return {}
@@ -171,10 +194,12 @@ class OKXIngestion:
         @return: Start and end dates in YYYYMMDD format.
         '''
         if self.start_date is not None and self.end_date is not None:
+            LOGGER.info("Using explicit date range %s to %s for %s", self.start_date, self.end_date, data_type)
             return str(self.start_date), str(self.end_date)
 
         hint_start_date = self.venue_config["historical_data_api"]["modules"][data_type]["available_since"].replace("-", "")
         end_date = date.today().strftime("%Y%m%d")
+        LOGGER.info("Resolving earliest available date for %s using hint %s", data_type, hint_start_date)
         return self._resolve_earliest_available_date(data_type, hint_start_date, end_date), end_date
 
     def _resolve_earliest_available_date(self, data_type: str, hint_start_date: str, end_date: str) -> str:
@@ -187,9 +212,11 @@ class OKXIngestion:
         @return: Earliest discovered date in YYYYMMDD format.
         '''
         current_start_date = hint_start_date
+        probe_index = 1
 
         while current_start_date <= end_date:
             current_end_date = min(datetime_utils.shift_date(current_start_date, days=30), end_date)
+            LOGGER.info("Probing %s availability window %s: %s to %s", data_type, probe_index, current_start_date, current_end_date)
             response_data = self._request_download_data(data_type, current_start_date, current_end_date)
             details = cast("list[dict[str, Any]]", response_data.get("details", []))
             first_date_ts = min(
@@ -202,9 +229,13 @@ class OKXIngestion:
                 default=None,
             )
             if first_date_ts is not None:
-                return datetime_utils.timestamp_ms_to_string(first_date_ts, fmt="%Y%m%d")
+                resolved_date = datetime_utils.timestamp_ms_to_string(first_date_ts, fmt="%Y%m%d")
+                LOGGER.info("Resolved earliest %s date to %s", data_type, resolved_date)
+                return resolved_date
             current_start_date = datetime_utils.shift_date(current_end_date)
+            probe_index += 1
 
+        LOGGER.info("No earlier %s data found; falling back to hint %s", data_type, hint_start_date)
         return hint_start_date
 
     def _check_data_existence(self, url: str) -> bool:
@@ -243,17 +274,22 @@ class OKXIngestion:
         '''
         for attempt in range(5):
             try:
+                LOGGER.info("Downloading %s", target_path.name)
                 with request.urlopen(url, timeout=300) as response, target_path.open("wb") as file_handle:
                     shutil.copyfileobj(response, file_handle)
+                LOGGER.info("Saved %s", target_path)
                 return
             except error.HTTPError as exc:
                 if exc.code != 429 or attempt == 4:
                     raise
                 retry_after = exc.headers.get("Retry-After")
+                LOGGER.warning("Rate limited downloading %s; retrying", target_path.name)
                 time.sleep(int(retry_after) if retry_after and retry_after.isdigit() else 2 ** attempt)
 
 
 if __name__ == "__main__":
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     parser = argparse.ArgumentParser(description="OKX ingestion engine")
     parser.add_argument("--instrument", nargs="*", default=[], help="Instrument(s) to ingest, e.g. BTC-USDT ETH-USDT",)
