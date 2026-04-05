@@ -17,13 +17,13 @@ LOGGER = logging.getLogger(__name__)
 class OKXOrderBookPreprocessor:
     """Convert OKX order book archives into first-pass Parquet datasets."""
 
-    def __init__(self, input_folder: Path | str, output_folder: Path | str, rolling_window: int, sigma_k: float) -> None:
+    def __init__(self, input_folder: Path | str, output_folder: Path | str, rolling_window: int = 100, sigma_k: float = 3.0) -> None:
         self.input_folder = Path(input_folder).expanduser().resolve()
         self.output_folder = Path(output_folder).expanduser().resolve()
         self.rolling_window = rolling_window
         self.sigma_k = sigma_k
 
-    def preprocess(self) -> list[Path]:
+    def preprocess(self) -> None:
         """Convert one or more OKX order book archives into Parquet files."""
 
         # Retrieve files
@@ -48,6 +48,7 @@ class OKXOrderBookPreprocessor:
             for member in archive.getmembers():
                 LOGGER.debug("Reading member %s from %s", member.name, archive_path.name)
                 extracted_file = archive.extractfile(member)
+                assert extracted_file is not None
                 raw_frame = pl.read_ndjson(extracted_file)
                 LOGGER.debug("Loaded %s raw row(s) from %s", raw_frame.height, member.name)
                 raw_frames.append(raw_frame)
@@ -162,17 +163,21 @@ class OKXOrderBookPreprocessor:
             LOGGER.debug("All rows removed by structural sanity filters")
             return frame
 
-        frame = frame.with_columns(pl.col("price").rolling_median(window_size=self.rolling_window, min_samples=1).alias("rolling_price_median"),
-                                   pl.col("price").rolling_std(window_size=self.rolling_window, min_samples=2).alias("rolling_price_std"),)
-        frame = frame.filter(pl.col("rolling_price_std").is_null()
-                             | ((pl.col("price") - pl.col("rolling_price_median")).abs() <= self.sigma_k * pl.col("rolling_price_std")))
+        frame = frame.with_columns(
+            pl.col("price").rolling_median(window_size=self.rolling_window, min_samples=1).alias("rolling_price_median"),
+            pl.col("price").rolling_std(window_size=self.rolling_window, min_samples=2).alias("rolling_price_std"),
+        )
+        frame = frame.filter(
+            pl.col("rolling_price_std").is_null()
+            | ((pl.col("price") - pl.col("rolling_price_median")).abs() <= self.sigma_k * pl.col("rolling_price_std"))
+        )
 
         filtered = frame.drop("rolling_price_median", "rolling_price_std")
         LOGGER.debug("Sanity filters kept %s row(s)", filtered.height)
         return filtered
 
 
-def main(data_source: str, data_type: str, info_type: str, inst_type: str, instrument: str, rolling_window: int, sigma_k: float) -> list[Path]:
+def main(data_source: str, data_type: str, info_type: str, inst_type: str, instrument: str, rolling_window: int, sigma_k: float) -> None:
     """
     Main entry point for crypto data preprocessing.
 
@@ -193,7 +198,7 @@ def main(data_source: str, data_type: str, info_type: str, inst_type: str, instr
     else:
         raise ValueError(f"Unsupported data source: {data_source}")
 
-    return preprocessor.preprocess()
+    preprocessor.preprocess()
 
 
 if __name__ == "__main__":
