@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib import error, request
 
+from fastapi import logger
 import polars as pl
 
 import utils.config_loader as config_loader
@@ -261,7 +262,7 @@ class OKXIngestion:
         '''
         file_name = url.rsplit("/", maxsplit=1)[-1]
         instrument_dir = instrument or "all"
-        return f"{DATA_ROOT}/raw/historical/{data_type}/{self.inst_type}/{instrument_dir}/{file_name}"
+        return f"{DATA_ROOT}/raw/OKX/historical/{data_type}/{self.inst_type}/{instrument_dir}/{file_name}"
 
     def _download_file(self, url: str, target_path: Path) -> None:
         '''
@@ -304,4 +305,4 @@ if __name__ == "__main__":
     start_date, end_date = (args.date_range if args.date_range else (None, None))
 
     ingestion = OKXIngestion(args.instrument, args.download_data_types, start_date, end_date, args.inst_type,)
-    print(ingestion.download_data())
+    logging.info("OKX ingestion returned %s discovered file(s)", ingestion.download_data().height)
