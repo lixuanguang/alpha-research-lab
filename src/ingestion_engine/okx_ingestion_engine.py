@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any, cast
 from urllib import error, request
 
-from fastapi import logger
 import polars as pl
 
 import utils.config_loader as config_loader
